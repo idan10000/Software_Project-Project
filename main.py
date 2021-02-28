@@ -2,6 +2,7 @@ import argparse
 import random
 
 from sklearn.datasets import make_blobs
+import matplotlib.pyplot as plt
 import numpy as np
 
 import kmeans_pp
@@ -64,17 +65,17 @@ def find_k(A1):
 
 
 def getWAMatrix(X, n):
-    W = np.zeros(n, n)
+    W = np.zeros([n, n])
     for i in range(n):
         for j in range(i + 1, n):
-            temp = np.exp(-(np.linalg.norm(X[:i] - X[:j])) / 2)
+            temp = np.exp(-(np.linalg.norm(X[i] - X[j])) / 2)
             W[i, j] = temp
             W[j, i] = temp
     return W
 
 
 def getDDMatrix(W, n):
-    D = np.zeros(n, n)
+    D = np.zeros([n, n])
     for i in range(n):
         # todo: may cause zero devision error
         # may improve if we create using np function
@@ -102,7 +103,6 @@ def NSC(X):
     T = norm_U(U)  # step 5
 
     return kmeans_pp.kmpp(k, n, T.shape[1], 300, T)  # step 6 + 7 (7 in C)
-
 
 
 def writeClustersToFile(clusters, file):
@@ -137,7 +137,25 @@ def createOutputFiles(K, X, Y, NSCClusters, KMPPClusters):
     clustersFile.close()
 
 
+def mapValueToColor(n, values, colorMap):
+    return [colorMap[values[num]] for num in range(n)]
 
+
+def createScatterPlots(n, K, X, d, NSCVisual, KMPPVisual):
+    cl = {num: plt.cm.RdYlBu(50 * num) for num in range(K)}
+
+    if d == 2:
+        plt.subplot(1, 2, 1)
+        plt.scatter(X[:, 0], X[:, 1], c=mapValueToColor(n, NSCVisual, cl))
+        plt.subplot(1, 2, 2)
+        plt.scatter(X[:, 0], X[:, 1], c=mapValueToColor(n, KMPPVisual, cl))
+    else:
+        fig = plt.figure()
+        ax1 = fig.add_subplot(121, projection='3d')
+        ax1.scatter(X[:, 0], X[:, 1], X[:, 2], c=mapValueToColor(n, NSCVisual, cl))
+        ax2 = fig.add_subplot(122, projection='3d')
+        ax2.scatter(X[:, 0], X[:, 1], X[:, 2], c=mapValueToColor(n, KMPPVisual, cl))
+    plt.show()
 
 
 def str2bool(v):
@@ -151,7 +169,17 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
+def countY(Y):
+    vals, counts = np.unique(Y, return_counts=True)
+    pairs = counts * (counts - 1) / 2
+    return sum(pairs)
+
+
 if __name__ == '__main__':
+    # a = np.array([1, 2, 3, 4, 4, 4])
+    # print(countY(a))
+
+    np.random.seed(0)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("K", type=int)
@@ -168,8 +196,8 @@ if __name__ == '__main__':
         n = args.N
         K = args.K
 
-    d = random.choice([2, 3])
-
+    # d = random.choice([2, 3])
+    d = 2
     if K >= n or K <= 0 or n <= 0 or type(rnd) is not bool:  # handle illegal args
         print("illegal arguments")
         exit()
@@ -182,3 +210,4 @@ if __name__ == '__main__':
     NSCClusters, NSCVisual = NSC(X)  # The clusters from the Normalized Spectral Clustering algorithm
     KMPPClusters, KMPPVisual = kmeans_pp.kmpp(K, n, d, 300, X)  # The clusters from the normal K-Means++ algorithm
     createOutputFiles(K, X, Y, NSCClusters, KMPPClusters)
+    createScatterPlots(n, K, X, d, np.array(NSCVisual), np.array(KMPPVisual))
