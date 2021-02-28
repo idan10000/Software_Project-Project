@@ -9,7 +9,7 @@ static void algorithm(int MAX_ITER, double **obs, double **centroids, int *clust
 
 long K, N, d;
 
-static int* kmeans(int MAX_ITER, double **obs, double **centroids) {
+static int *kmeans(int MAX_ITER, double **obs, double **centroids) {
     int i;
     double **sums, **cobs, **ccentroids, **csums;
     int *clusters, *cclusters;
@@ -142,15 +142,15 @@ static void algorithm(int MAX_ITER, double **obs, double **centroids, int *clust
 
 }
 
-static PyObject* kmeans_capi(PyObject *self, PyObject *args)
-{
-    int MAX_ITER, *clusters;
+static PyObject *kmeans_capi(PyObject *self, PyObject *args) {
+    int MAX_ITER, **clusters, *clusterAssignments, *clusterAmounts, q;
     double **obs, **centroids;
-    PyObject *obsRow, *centRow, *item, *_lstObs, *_lstCent, *python_list;
+    PyObject *obsRow, *centRow, *item, *_lstObs, *_lstCent, *python_cluster_list, *python_point_list, *python_tuple,
+        *python_int, *python_inner_list;
     Py_ssize_t i, j, ln, lk, ld;
 
     /* init params from python */
-    if(!PyArg_ParseTuple(args, "iOO", &MAX_ITER ,&_lstObs, &_lstCent)) {
+    if (!PyArg_ParseTuple(args, "iOO", &MAX_ITER, &_lstObs, &_lstCent)) {
         return NULL;
     }
 
@@ -160,10 +160,10 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
 
     N = (long) PyObject_Length(_lstObs);
     K = (long) PyObject_Length(_lstCent);
-    d = (long) PyObject_Length(PyList_GetItem(_lstObs,0));
+    d = (long) PyObject_Length(PyList_GetItem(_lstObs, 0));
     ln = PyList_Size(_lstObs);
     lk = PyList_Size(_lstCent);
-    ld = PyList_Size(PyList_GetItem(_lstObs,0));
+    ld = PyList_Size(PyList_GetItem(_lstObs, 0));
 
 
     obs = malloc(sizeof(double *) * N);
@@ -185,7 +185,7 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
     for (i = 0; i < lk; i++) {
         obsRow = PyList_GetItem(_lstObs, i);
         centRow = PyList_GetItem(_lstCent, i);
-        for(j = 0; j < ld; j++){
+        for (j = 0; j < ld; j++) {
             item = PyList_GetItem(obsRow, j);
             obs[i][j] = PyFloat_AsDouble(item);
             item = PyList_GetItem(centRow, j);
@@ -195,25 +195,62 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
 
     for (i = lk; i < ln; i++) {
         obsRow = PyList_GetItem(_lstObs, i);
-        for(j = 0; j < ld; j++){
+        for (j = 0; j < ld; j++) {
             item = PyList_GetItem(obsRow, j);
             obs[i][j] = PyFloat_AsDouble(item);
         }
     }
 
-    clusters = malloc(sizeof(int) * N);
-    if(clusters = NULL){
+    clusterAssignments = malloc(sizeof(int) * N);
+    if (clusterAssignments == NULL) {
         //TODO: handle malloc error
     }
 
-    clusters = kmeans(MAX_ITER,obs,centroids);
+    clusterAssignments = kmeans(MAX_ITER, obs, centroids);
 
-    python_list = PyList_New(N);
+    python_point_list = PyList_New(N);
 
     for (i = 0; i < N; ++i){
-        PyObject* python_int = Py_BuildValue("i", clusters[i]);
-        PyList_SetItem(python_list, i, python_int);
+        python_int = Py_BuildValue("i", clusterAssignments[i]);
+        PyList_SetItem(python_point_list, i, python_int);
     }
+
+    clusterAmounts = calloc(K, sizeof(int));
+    if (clusterAmounts == NULL) {
+        //TODO: handle malloc error
+    }
+
+    for (i = 0; i < N; ++i)
+        clusterAmounts[clusterAmounts[i]]++;
+
+
+    clusters = malloc(sizeof(int *) * K);
+    if (clusterAmounts == NULL) {
+        //TODO: handle malloc error
+    }
+    for (i = 0; i < N; ++i) {
+        clusters[i] = malloc(sizeof(int) * clusterAmounts[i]);
+        if (clusters[i] == NULL) {
+            //TODO: handle malloc error
+        }
+    }
+
+    for (q = 0; i < N; ++i) {
+        j = clusterAssignments[q];
+        clusters[j][(clusterAmounts[j]--) - 1] = q; // potential fault
+    }
+
+    python_cluster_list = PyList_New(K);
+    for (i = 0; i < K; ++i) {
+        python_inner_list = PyList_New(clusterAmounts[i]);
+        for (j = 0; j < clusterAmounts[i]; ++j) {
+            python_int = Py_BuildValue("i", clusters[i][j]);
+            PyList_SetItem(python_inner_list, j, python_int);
+        }
+        PyList_SetItem(python_cluster_list, i, python_inner_list);
+    }
+
+    python_tuple = PyTuple_Pack(2, python_cluster_list, python_cluster_list);
 
     /* free memory */
 
@@ -226,27 +263,31 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
     }
     free(centroids);
 
+    for (i = N - 1; i >= 0; --i) {
+        free(clusters[i]);
+    }
     free(clusters);
+    free(clusterAmounts);
+    free(clusterAssignments);
 
-    return python_list;
+    return python_tuple;
 }
 
 static PyMethodDef _methods[] = {
-    {"kmeans", (PyCFunction)kmeans_capi, METH_VARARGS, PyDoc_STR("Enter MAX_ITER + Observations + Centroids")},
-    {NULL, NULL, 0, NULL}   /* sentinel */
+        {"kmeans", (PyCFunction) kmeans_capi, METH_VARARGS, PyDoc_STR("Enter MAX_ITER + Observations + Centroids")},
+        {NULL,     NULL,                      0,            NULL}   /* sentinel */
 };
 
 static struct PyModuleDef _moduledef = {
-    PyModuleDef_HEAD_INIT,
-    "mykmeanssp",
-    NULL,
-    -1,
-    _methods
+        PyModuleDef_HEAD_INIT,
+        "mykmeanssp",
+        NULL,
+        -1,
+        _methods
 };
 
 PyMODINIT_FUNC
-PyInit_mykmeanssp(void)
-{
+PyInit_mykmeanssp(void) {
     PyObject *m;
     m = PyModule_Create(&_moduledef);
     if (!m) {

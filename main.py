@@ -101,7 +101,43 @@ def NSC(X):
     U = Q[:, eigVectorsIndexes]  # step 4 - really not sure if this one will work
     T = norm_U(U)  # step 5
 
-    assignments = kmeans_pp.kmpp(k, n, T.shape[1], 300, T)  # step 6
+    return kmeans_pp.kmpp(k, n, T.shape[1], 300, T)  # step 6 + 7 (7 in C)
+
+
+
+def writeClustersToFile(clusters, file):
+    """
+    Writes the clusters to the file in the format defined by the assignment (ex. 1,9,2)
+    :param clusters: the cluster assignment created by the respective algorithm
+    :param file: the file the clusters are to be written in
+    """
+    for i in range(len(clusters)):
+        for j in range(len(clusters[i]) - 1):
+            file.write("%f," % clusters[i][j])
+        file.write("%d\n" % clusters[i][len(clusters[i]) - 1])
+
+
+def createOutputFiles(K, X, Y, NSCClusters, KMPPClusters):
+    dataFile = open("data.txt", "w")
+    clustersFile = open("clusters.txt", "w")
+
+    # Write blobs to data file
+    for i in range(X.shape[0]):
+        for j in range(X.shape[1]):
+            dataFile.write("%f," % X[i][j])
+        dataFile.write("%d\n" % Y[i])
+
+    dataFile.close()
+
+    # Write cluster assignments from each algorithm to clusters file
+    clustersFile.write("%d\n" % K)
+    writeClustersToFile(NSCClusters, clustersFile)
+    writeClustersToFile(KMPPClusters, clustersFile)
+
+    clustersFile.close()
+
+
+
 
 
 def str2bool(v):
@@ -123,7 +159,7 @@ if __name__ == '__main__':
     parser.add_argument("random", type=str2bool)
     args = parser.parse_args()
 
-    #TODO: check if needed different max values for 2 and 3 dimensions
+    # TODO: check if needed different max values for 2 and 3 dimensions
     rnd = args.random
     if rnd:
         n = random.choice(range(nCap // 2, nCap + 1))
@@ -132,13 +168,17 @@ if __name__ == '__main__':
         n = args.N
         K = args.K
 
-    if K >= n or K <= 0 or n <= 0 or type(rnd) is not bool: # handle illegal args
+    d = random.choice([2, 3])
+
+    if K >= n or K <= 0 or n <= 0 or type(rnd) is not bool:  # handle illegal args
         print("illegal arguments")
         exit()
 
     if K > KCap or n > nCap:
         print("BEWARE inputted n or K values exceed maximum capacity - the program will run for over 5 minutes")
 
-    X, Y = make_blobs(n, random.choice([2, 3]), K)
+    X, Y = make_blobs(n, d, K)
 
-
+    NSCClusters, NSCVisual = NSC(X)  # The clusters from the Normalized Spectral Clustering algorithm
+    KMPPClusters, KMPPVisual = kmeans_pp.kmpp(K, n, d, 300, X)  # The clusters from the normal K-Means++ algorithm
+    createOutputFiles(K, X, Y, NSCClusters, KMPPClusters)
