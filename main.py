@@ -56,6 +56,7 @@ def find_k(A1):
     v = np.array([A1[i, i] for i in range(n)])
     vArgs = v.argsort()
     v.sort()  # TODO: check if sort is not needed
+    u = np.diff(v)
     # can do boolean indexing to get V
 
     # print(v)
@@ -84,6 +85,7 @@ def getDDMatrix(W, n):
 
 
 def norm_U(U):
+    #todo: fix if it's just one vector
     T = U.copy()
     norms = np.linalg.norm(T, axis=1)
     T = T / norms[:, np.newaxis]
@@ -98,10 +100,8 @@ def NSC(X):
 
     A, Q = QRI(L, eps)
     k, eigVectorsIndexes = find_k(A)  # step 3
-
     U = Q[:, eigVectorsIndexes]  # step 4 - really not sure if this one will work
     T = norm_U(U)  # step 5
-
     return kmeans_pp.kmpp(k, n, T.shape[1], 300, T)  # step 6 + 7 (7 in C)
 
 
@@ -174,12 +174,25 @@ def countY(Y):
     pairs = counts * (counts - 1) / 2
     return sum(pairs)
 
+def Jaccard(clusters,Y,npVisual):
+    count = 0
+    for lst in clusters:
+        vec = Y[lst]
+        # print(vec)
+        count += countY(vec)
+    # print(count)
+    # print(countY(Y))
+    return count / countY(npVisual)
+
+
 
 if __name__ == '__main__':
-    # a = np.array([1, 2, 3, 4, 4, 4])
+    # a = np.array([1, 2, 3, 4, 4, 4,2])
     # print(countY(a))
+    # clusters = [[0,1,5,6],[2,3,4]]
+    # print(Jaccard(clusters,a))
 
-    np.random.seed(0)
+    np.random.seed(5)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("K", type=int)
@@ -208,6 +221,6 @@ if __name__ == '__main__':
     X, Y = make_blobs(n, d, K)
 
     NSCClusters, NSCVisual = NSC(X)  # The clusters from the Normalized Spectral Clustering algorithm
-    KMPPClusters, KMPPVisual = kmeans_pp.kmpp(K, n, d, 300, X)  # The clusters from the normal K-Means++ algorithm
-    createOutputFiles(K, X, Y, NSCClusters, KMPPClusters)
-    createScatterPlots(n, K, X, d, np.array(NSCVisual), np.array(KMPPVisual))
+    # KMPPClusters, KMPPVisual = kmeans_pp.kmpp(K, n, d, 300, X)  # The clusters from the normal K-Means++ algorithm
+    # createOutputFiles(K, X, Y, NSCClusters, KMPPClusters)
+    # createScatterPlots(n, K, X, d, np.array(NSCVisual), np.array(KMPPVisual))

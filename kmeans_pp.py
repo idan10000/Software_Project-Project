@@ -6,9 +6,9 @@ def kmpp(K, N, d, MAX_ITER, obs):
     # obs = pd.read_csv(f'{args.filename}', header=None)
 
     initial, _ = k_means_pp(obs, N, K, d)
-    print(initial.tolist())
-    print(obs.tolist())
-    print("\n\n\n\n")
+    # print(initial.tolist())
+    # print(obs.tolist())
+    # print("\n\n\n\n")
     X = mykmeanssp.kmeans(MAX_ITER, obs.tolist(), initial.tolist())
     print(X)
     return X

@@ -9,11 +9,9 @@ static void algorithm(int MAX_ITER, double **obs, double **centroids, int *clust
 
 long K, N, d;
 
-static int *kmeans(int MAX_ITER, double **obs, double **centroids) {
+static int *kmeans(int MAX_ITER, double **obs, double **centroids, int *clusters) {
     int i;
-    double **sums, **cobs, **ccentroids, **csums;
-    int *clusters, *cclusters;
-
+    double **sums;
 
     /* declare array variables */
     sums = malloc(sizeof(double *) * K);
@@ -24,12 +22,8 @@ static int *kmeans(int MAX_ITER, double **obs, double **centroids) {
         assert(sums[i] != NULL);
     }
 
-    clusters = malloc(N * sizeof(int));
-    assert(clusters != NULL);
 
-    csums = sums, cobs = obs, ccentroids = centroids;
-    cclusters = clusters;
-    algorithm(MAX_ITER, cobs, ccentroids, cclusters, csums);
+    algorithm(MAX_ITER, obs, centroids, clusters, sums);
 
 
     /* free memory */
@@ -140,153 +134,219 @@ static void algorithm(int MAX_ITER, double **obs, double **centroids, int *clust
 
 }
 
-struct PyInput{
+struct PyInput {
+    int MAX_ITER;
     Py_ssize_t ln;
     Py_ssize_t lk;
     Py_ssize_t ld;
     PyObject *obsRow, *centRow, *item, *_lstObs, *_lstCent;
+};
+
+struct CInput {
+    double **obs;
+    double **centroids;
+};
+
+struct PyOutput {
+    PyObject *python_cluster_list,
+            *python_point_list,
+            *python_int;
+};
+
+struct COutput {
+    int **clusters;
+    int *clusterAssignments;
+    int *clusterAmounts;
+    int *indexes;
+};
+
+void initInput(struct CInput *cInput) {
+    int i;
+    cInput->obs = malloc(sizeof(double *) * N);
+    assert(cInput->obs != NULL);
+    for (i = 0; i < N; ++i) {
+        (cInput->obs)[i] = malloc(sizeof(double) * d);
+        assert(cInput->obs[i] != NULL);
+    }
+    (cInput->centroids) = malloc(sizeof(double *) * K);
+    assert((cInput->centroids) != NULL);
+
+    for (i = 0; i < K; ++i) {
+        (cInput->centroids)[i] = malloc(sizeof(double) * d);
+        assert((cInput->centroids)[i] != NULL);
+    }
+
 }
 
-static PyObject *kmeans_capi(PyObject *self, PyObject *args) {
-    struct PyInput input;
-    int MAX_ITER, **clusters, *clusterAssignments, *clusterAmounts, q;
-    double **obs, **centroids;
-    PyObject *python_cluster_list, *python_point_list, *python_tuple,
-        *python_int, *python_inner_list;
+void freeInput(struct CInput *cInput) {
+    int i;
+
+    for (i = N - 1; i >= 0; --i) {
+        free((cInput->obs)[i]);
+    }
+    free((cInput->obs));
+
+    for (i = K - 1; i >= 0; --i) {
+        free((cInput->centroids)[i]);
+    }
+    free((cInput->centroids));
+}
+
+static void HandleInput(struct PyInput *input, struct CInput *cInput) {
     Py_ssize_t i, j;
+    N = (long) PyObject_Length(input->_lstObs);
+    K = (long) PyObject_Length(input->_lstCent);
+    d = (long) PyObject_Length(PyList_GetItem(input->_lstObs, 0));
+    input->ln = PyList_Size(input->_lstObs);
+    input->lk = PyList_Size(input->_lstCent);
+    input->ld = PyList_Size(PyList_GetItem(input->_lstObs, 0));
 
-    /* init params from python */
-    if (!PyArg_ParseTuple(args, "iOO", &MAX_ITER, &_lstObs, &_lstCent)) {
-        return NULL;
-    }
-
-    if (!PyList_Check(_lstObs) || !PyList_Check(_lstCent))
-        return NULL;
-
-
-    input.N = (long) PyObject_Length(_lstObs);
-    input.K = (long) PyObject_Length(_lstCent);
-    input.d = (long) PyObject_Length(PyList_GetItem(_lstObs, 0));
-    input.ln = PyList_Size(_lstObs);
-    input.lk = PyList_Size(_lstCent);
-    input.ld = PyList_Size(PyList_GetItem(_lstObs, 0));
-
-
-    obs = malloc(sizeof(double *) * N);
-    assert(obs != NULL);
-    for (i = 0; i < N; ++i) {
-        obs[i] = malloc(sizeof(double) * d);
-        assert(obs[i] != NULL);
-    }
-    centroids = malloc(sizeof(double *) * K);
-    assert(centroids != NULL);
-
-    for (i = 0; i < K; ++i) {
-        centroids[i] = malloc(sizeof(double) * d);
-        assert(centroids[i] != NULL);
-    }
-
+    initInput(cInput);
 
     /* Go over each item of the list and reduce it */
-    for (i = 0; i < lk; i++) {
-        obsRow = PyList_GetItem(_lstObs, i);
-        centRow = PyList_GetItem(_lstCent, i);
-        for (j = 0; j < ld; j++) {
-            item = PyList_GetItem(obsRow, j);
-            obs[i][j] = PyFloat_AsDouble(item);
-            item = PyList_GetItem(centRow, j);
-            centroids[i][j] = PyFloat_AsDouble(item);
+    for (i = 0; i < input->lk; i++) {
+        input->obsRow = PyList_GetItem(input->_lstObs, i);
+        input->centRow = PyList_GetItem(input->_lstCent, i);
+        for (j = 0; j < input->ld; j++) {
+            input->item = PyList_GetItem(input->obsRow, j);
+            (cInput->obs)[i][j] = PyFloat_AsDouble(input->item);
+            input->item = PyList_GetItem(input->centRow, j);
+            (cInput->centroids)[i][j] = PyFloat_AsDouble(input->item);
         }
     }
 
-    for (i = lk; i < ln; i++) {
-        obsRow = PyList_GetItem(_lstObs, i);
-        for (j = 0; j < ld; j++) {
-            item = PyList_GetItem(obsRow, j);
-            obs[i][j] = PyFloat_AsDouble(item);
+    for (i = input->lk; i < input->ln; i++) {
+        input->obsRow = PyList_GetItem(input->_lstObs, i);
+        for (j = 0; j < input->ld; j++) {
+            input->item = PyList_GetItem(input->obsRow, j);
+            (cInput->obs)[i][j] = PyFloat_AsDouble(input->item);
         }
     }
 
-    clusterAssignments = kmeans(MAX_ITER, obs, centroids);
+}
 
-    // ---------------------------------- OUTPUT -----------------------------------------
-
-    python_point_list = PyList_New(N);
-
-    for (i = 0; i < N; ++i){
-        python_int = Py_BuildValue("i", clusterAssignments[i]);
-        PyList_SetItem(python_point_list, i, python_int);
+static void initOutput(struct COutput *COutput) {
+    int i;
+    (COutput->clusterAssignments) = malloc(sizeof(int) * N);
+    if ((COutput->clusterAssignments) == NULL) {
+        //TODO: handle malloc error
+        printf("error");
     }
 
-
-    clusterAmounts = calloc(K, sizeof(int));
-    if (clusterAmounts == NULL) {
+    (COutput->clusterAmounts) = calloc(K, sizeof(int));
+    if ((COutput->clusterAssignments) == NULL) {
         //TODO: handle malloc error
     }
 
-    for (i = 0; i < N; ++i)
-        clusterAmounts[clusterAssignments[i]]++;
-
-    clusters = malloc(sizeof(int *) * K);
-    if (clusters == NULL) {
+    COutput->clusters = malloc(sizeof(int *) * K);
+    if (COutput->clusters == NULL) {
         //TODO: handle malloc error
     }
 
     for (i = 0; i < K; ++i) {
-        clusters[i] = malloc(sizeof(int) * clusterAmounts[i]);
-        if (clusters[i] == NULL) {
+        (COutput->clusters)[i] = malloc(sizeof(int) * (COutput->clusterAmounts)[i]);
+        if ((COutput->clusters)[i] == NULL) {
             //TODO: handle malloc error
         }
     }
+    COutput->indexes = calloc(K, sizeof(int));
+}
 
-    for (q = 0; q < N; ++q) {
-        j = clusterAssignments[q];
-        clusters[j][(clusterAmounts[j]) - 1] = q; // potential fault
-        printf("%d\n", j);
-        clusterAmounts[j]--;
+static void freeOutput(struct COutput *cOutput) {
+    free(cOutput->clusterAmounts);
+    free(cOutput->indexes);
+}
+
+static void initPythonClustersList(struct PyOutput *output, struct COutput *COutput) {
+    int i, j;
+    PyObject *python_inner_list;
+
+    for (i = 0; i < N; ++i)
+        (COutput->clusterAmounts)[(COutput->clusterAssignments)[i]]++;
+
+    for (i = 0; i < K; ++i)
+        printf("%d,", COutput->clusterAmounts[i]);
+    printf("\n\n");
+
+    for (i = 0; i < N; ++i)
+        printf("%d,", COutput->clusterAssignments[i]);
+    printf("\n\n");
+
+    for (i = 0; i < N; ++i) {
+
+        j = (COutput->clusterAssignments)[i];
+
+        (COutput->clusters)[j][(COutput->indexes)[j]] = i;
+
+        (COutput->indexes)[j]++;
+
     }
+        printf("1");
 
-
-    python_cluster_list = PyList_New(K);
+    output->python_cluster_list = PyList_New(K);
     for (i = 0; i < K; ++i) {
-        python_inner_list = PyList_New(clusterAmounts[i]);
-        for (j = 0; j < clusterAmounts[i]; ++j) {
-            python_int = Py_BuildValue("i", clusters[i][j]);
-            PyList_SetItem(python_inner_list, j, python_int);
+        python_inner_list = PyList_New((COutput->clusterAmounts)[i]);
+        for (j = 0; j < (COutput->clusterAmounts)[i]; ++j) {
+            output->python_int = Py_BuildValue("i", (COutput->clusters)[i][j]);
+            PyList_SetItem(python_inner_list, j, output->python_int);
         }
-        PyList_SetItem(python_cluster_list, i, python_inner_list);
+        PyList_SetItem(output->python_cluster_list, i, python_inner_list);
+    }
+    printf("2");
+
+}
+
+static void HandleOutput(struct PyOutput *output, struct COutput *cOutput) {
+    int i;
+
+    (output->python_point_list) = PyList_New(N);
+
+    for (i = 0; i < N; ++i) {
+        output->python_int = Py_BuildValue("i", cOutput->clusterAssignments[i]);
+        PyList_SetItem(output->python_point_list, i, output->python_int);
     }
 
+    initPythonClustersList(output, cOutput);
 
-    python_tuple = PyTuple_Pack(2, python_cluster_list, python_point_list);
+    printf("3");
+    freeOutput(cOutput);
+    printf("4\n");
+
+}
 
 
-    /* free memory */
-             printf("before \n");
+static PyObject *kmeans_capi(PyObject *self, PyObject *args) {
+    struct PyInput input;
+    struct CInput cInput;
+    struct PyOutput output;
+    struct COutput cOutput;
 
-    for (i = N - 1; i >= 0; --i) {
-        free(obs[i]);
+    PyObject *python_tuple;
+
+    /* init params from python */
+    if (!PyArg_ParseTuple(args, "iOO", &input.MAX_ITER, &input._lstObs, &input._lstCent)) {
+        return NULL;
     }
-    free(obs);
-         printf("obs \n");
 
-    for (i = K - 1; i >= 0; --i) {
-        free(centroids[i]);
-    }
-    free(centroids);
-         printf("cent \n");
+    if (!PyList_Check(input._lstObs) || !PyList_Check(input._lstCent))
+        return NULL;
 
-    for (i = N - 1; i >= 0; --i) {
-//        free(clusters[i]);
-    }
-//    free(clusters);
-             printf("clust \n");
 
-    free(clusterAmounts);
-                 printf("amount \n");
+    printf("input\n");
+    HandleInput(&input, &cInput);
 
-//    free(clusterAssignments);
-         printf("after \n");
+    printf("init output\n");
+
+    initOutput(&cOutput);
+    printf("kmeans\n");
+
+    cOutput.clusterAssignments = kmeans(input.MAX_ITER, cInput.obs, cInput.centroids, cOutput.clusterAssignments);
+    printf("output\n");
+
+    HandleOutput(&output, &cOutput);
+    printf("finished output\n");
+    python_tuple = PyTuple_Pack(2, output.python_cluster_list, output.python_point_list);
+    printf("finished tuples\n");
 
     return python_tuple;
 }
