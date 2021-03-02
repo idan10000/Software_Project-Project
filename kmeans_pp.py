@@ -6,13 +6,15 @@ def kmpp(K, N, d, MAX_ITER, obs):
     # obs = pd.read_csv(f'{args.filename}', header=None)
 
     initial, _ = k_means_pp(obs, N, K, d)
-    # print(initial.tolist())
-    # print(obs.tolist())
-    # print("\n\n\n\n")
     X = mykmeanssp.kmeans(MAX_ITER, obs.tolist(), initial.tolist())
-    print(X)
-    return X
 
+    _, clusterSizes = np.unique(np.array(X), return_counts=True)
+    Y = [[0] * clusterSizes[i] for i in range(K)]
+    for i in range(len(X)):
+        Y[X[i]][clusterSizes[X[i]] - 1] = i
+        clusterSizes[X[i]] -= 1
+
+    return Y, X
 
 
 def print_ind(vec):
@@ -31,7 +33,7 @@ def calc_d(obs, cents, i):
 def update_dists(obs, D1, m, N):
     new_vec = obs[m, :]
     new_dists = np.zeros([N, 2])
-    new_dists[:, 0] = (np.linalg.norm(obs - new_vec, axis=1))**2
+    new_dists[:, 0] = (np.linalg.norm(obs - new_vec, axis=1)) ** 2
     new_dists[:, 1] = D1
     return new_dists.min(axis=1)
 
@@ -44,7 +46,7 @@ def k_means_pp(obs, N, K, d):
     ind[0] = i
     initial[0, :] = obs[i, :]
     cent = obs[i, :]
-    D1 = (np.linalg.norm(obs - cent, axis=1))**2
+    D1 = (np.linalg.norm(obs - cent, axis=1)) ** 2
     for j in range(1, K):
         s = sum(D1)
         P = D1 / s
@@ -54,5 +56,3 @@ def k_means_pp(obs, N, K, d):
         initial[j, :] = obs[m, :]
         D1 = update_dists(obs, D1, m, N)
     return initial, ind
-
-
