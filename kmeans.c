@@ -309,7 +309,7 @@ static void HandleOutput(struct PyOutput *output, struct COutput *cOutput) {
     initPythonClustersList(output, cOutput);
 
     printf("3");
-    freeOutput(cOutput);
+//    freeOutput(cOutput);
     printf("4\n");
 
 }
@@ -334,7 +334,7 @@ static PyObject *kmeans_capi(PyObject *self, PyObject *args) {
 
     printf("input\n");
     HandleInput(&input, &cInput);
-
+    printf("%ld\n", K);
     printf("init output\n");
 
     initOutput(&cOutput);
@@ -347,6 +347,7 @@ static PyObject *kmeans_capi(PyObject *self, PyObject *args) {
     printf("finished output\n");
     python_tuple = PyTuple_Pack(2, output.python_cluster_list, output.python_point_list);
     printf("finished tuples\n");
+    freeInput(&cInput);
 
     return python_tuple;
 }
