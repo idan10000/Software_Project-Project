@@ -14,7 +14,7 @@ KCap = 50  # TODO: calculate
 
 
 def MGS(A):
-    U = A.copy()
+    U = A.astype('float64').copy()
     n = A.shape[0]  # size of matrix A
 
     R = np.zeros([n, n])
@@ -195,35 +195,39 @@ def Jaccard(clusters, Y, npVisual):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("K", type=int)
-    parser.add_argument("N", type=int)
-    parser.add_argument("random", type=str2bool)
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("K", type=int)
+    # parser.add_argument("N", type=int)
+    # parser.add_argument("random", type=str2bool)
+    # args = parser.parse_args()
+    #
+    # # TODO: check if needed different max values for 2 and 3 dimensions
+    # rnd = args.random
+    # if rnd:
+    #     n = random.choice(range(nCap // 2, nCap + 1))
+    #     K = random.choice(range(KCap // 2, KCap + 1))
+    # else:
+    #     n = args.N
+    #     K = args.K
+    #
+    # d = random.choice([2, 3])
+    # # d = 2
+    # if K >= n or K <= 0 or n <= 0 or type(rnd) is not bool:  # handle illegal args
+    #     print("illegal arguments")
+    #     exit()
+    #
+    # if K > KCap or n > nCap:
+    #     print("BEWARE inputted n or K values exceed maximum capacity - the program will run for over 5 minutes")
+    #
+    # X, Y = make_blobs(n, d, K)
+    #
+    # NSCClusters, NSCVisual, calc_K = NSC(X, K, rnd)  # The clusters from the Normalized Spectral Clustering algorithm
+    # KMPPClusters, KMPPVisual = kmeans_pp.kmpp(K, n, d, 300, X)  # The clusters from the normal K-Means++ algorithm
+    # createOutputFiles(K, X, Y, NSCClusters, KMPPClusters)
+    # createScatterPlots(n, calc_K, X, d, K, np.array(NSCVisual), np.array(KMPPVisual),
+    #                    round(Jaccard(NSCClusters, Y, NSCVisual), 2),
+    #                    round(Jaccard(KMPPClusters, Y, KMPPVisual), 2))
 
-    # TODO: check if needed different max values for 2 and 3 dimensions
-    rnd = args.random
-    if rnd:
-        n = random.choice(range(nCap // 2, nCap + 1))
-        K = random.choice(range(KCap // 2, KCap + 1))
-    else:
-        n = args.N
-        K = args.K
-
-    d = random.choice([2, 3])
-    # d = 2
-    if K >= n or K <= 0 or n <= 0 or type(rnd) is not bool:  # handle illegal args
-        print("illegal arguments")
-        exit()
-
-    if K > KCap or n > nCap:
-        print("BEWARE inputted n or K values exceed maximum capacity - the program will run for over 5 minutes")
-
-    X, Y = make_blobs(n, d, K)
-
-    NSCClusters, NSCVisual, calc_K = NSC(X, K, rnd)  # The clusters from the Normalized Spectral Clustering algorithm
-    KMPPClusters, KMPPVisual = kmeans_pp.kmpp(K, n, d, 300, X)  # The clusters from the normal K-Means++ algorithm
-    createOutputFiles(K, X, Y, NSCClusters, KMPPClusters)
-    createScatterPlots(n, calc_K, X, d, K, np.array(NSCVisual), np.array(KMPPVisual),
-                       round(Jaccard(NSCClusters, Y, NSCVisual), 2),
-                       round(Jaccard(KMPPClusters, Y, KMPPVisual), 2))
+    MGS(np.array([[1, -1, 4.],
+                  [1, 4, -2],
+                  [1, 4, 2]]))
