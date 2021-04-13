@@ -4,35 +4,48 @@
 #include <Python.h>
 
 
-static void algorithm(int MAX_ITER, double **obs, double **centroids, int *clusters, double **sums);
+static char algorithm(int MAX_ITER, double **obs, double **centroids, int *clusters, double **sums);
 
 
 long K, N, d;
+int eps;
 
-static void kmeans(int MAX_ITER, double **obs, double **centroids, int** clusters) {
+static char kmeans(int MAX_ITER, double **obs, double **centroids, int** clusters) {
     int i;
+    char errorFlag;
     double **sums;
 
 
     /* declare array variables */
     sums = malloc(sizeof(double *) * K);
-    assert(sums != NULL);
+    if(sums == NULL){
+        printf("Error allocating sums base array. Stacktrace:\n");
+        PyErr_Print();
+        PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
+        return 1;
+    }
 
     for (i = 0; i < K; ++i) {
         sums[i] = malloc(sizeof(double) * d);
-        assert(sums[i] != NULL);
+        if(sums[i] == NULL){
+            printf("Error allocating sums inner array at index %d. Stacktrace:\n", i);
+            PyErr_Print();
+            PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
+            return 1;
+        }
     }
 
 
-    algorithm(MAX_ITER, obs, centroids, *clusters, sums);
-
+    errorFlag = algorithm(MAX_ITER, obs, centroids, *clusters, sums);
 
     /* free memory */
     for (i = K - 1; i >= 0; --i) {
         free(sums[i]);
     }
     free(sums);
-
+    if(errorFlag == 1)
+        return 1;
+    return 0;
 }
 
 static double norm(double *x, double *cluster) {
@@ -97,7 +110,22 @@ static char updateCentroids(double **obs, double **centroids, int *clusters, dou
     resetSums(sums);
     changedAny = 0;
     clusterSizes = calloc(K, sizeof(int));
+    if(clusterSizes == NULL){
+        printf("Error allocating clusterSizes array. Stacktrace:\n");
+        PyErr_Print();
+        PyErr_SetString(PyExc_MemoryError, "error allocating memory (calloc)");
+        return 2;
+
+    }
+
     tempCentroid = malloc(d * sizeof(double));
+    if(tempCentroid == NULL){
+        printf("Error allocating tempCentroid array. Stacktrace:\n");
+        PyErr_Print();
+        PyErr_SetString(PyExc_MemoryError, "error allocating memory (calloc)");
+        return 2;
+
+    }
     for (i = 0; i < N; ++i) {
         for (j = 0; j < d; ++j) {
             sums[clusters[i]][j] += obs[i][j];
@@ -110,8 +138,14 @@ static char updateCentroids(double **obs, double **centroids, int *clusters, dou
                 tempCentroid[j] = sums[i][j] / clusterSizes[i];
             else
                 tempCentroid[j] = centroids[i][j];
-            if (!changedAny && tempCentroid[j] != centroids[i][j])
-                changedAny = 1;
+            if (!changedAny){
+                if(tempCentroid[j] >= centroids[i][j]){
+                    if(tempCentroid[j] - centroids[i][j] <= eps)
+                        changedAny = 1;
+                }
+                else if(centroids[i][j] - tempCentroid[j]  <= eps)
+                        changedAny = 1;
+            }
             centroids[i][j] = tempCentroid[j];
         }
     }
@@ -121,7 +155,7 @@ static char updateCentroids(double **obs, double **centroids, int *clusters, dou
 }
 
 
-static void algorithm(int MAX_ITER, double **obs, double **centroids, int *clusters, double **sums) {
+static char algorithm(int MAX_ITER, double **obs, double **centroids, int *clusters, double **sums) {
     char changedCluster;
     int i;
     changedCluster = 1;
@@ -129,7 +163,10 @@ static void algorithm(int MAX_ITER, double **obs, double **centroids, int *clust
     for (i = 0; i < MAX_ITER && changedCluster; ++i) {
         assignAllObservations(obs, centroids, clusters);
         changedCluster = updateCentroids(obs, centroids, clusters, sums);
+        if(changedCluster == 2)
+            return 1;
     }
+    return 0;
 
 }
 
@@ -157,20 +194,40 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
     ln = PyList_Size(_lstObs);
     lk = PyList_Size(_lstCent);
     ld = PyList_Size(PyList_GetItem(_lstObs,0));
-
+    eps = 0.0001;
 
     obs = malloc(sizeof(double *) * N);
-    assert(obs != NULL);
+    if(obs == NULL){
+        printf("Error allocating obs base array. Stacktrace:\n");
+        PyErr_Print();
+        PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
+        Py_RETURN_NONE;
+    }
     for (i = 0; i < N; ++i) {
         obs[i] = malloc(sizeof(double) * d);
-        assert(obs[i] != NULL);
+        if(obs[i] == NULL){
+            printf("Error allocating obs inner array. Stacktrace:\n");
+            PyErr_Print();
+            PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
+            Py_RETURN_NONE;
+        }
     }
     centroids = malloc(sizeof(double *) * K);
-    assert(centroids != NULL);
+    if(centroids == NULL){
+        printf("Error allocating centroid base array. Stacktrace:\n");
+        PyErr_Print();
+        PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
+        Py_RETURN_NONE;
+    }
 
     for (i = 0; i < K; ++i) {
         centroids[i] = malloc(sizeof(double) * d);
-        assert(centroids[i] != NULL);
+        if(centroids[i] == NULL){
+            printf("Error allocating centroids inner array. Stacktrace:\n");
+            PyErr_Print();
+            PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
+            Py_RETURN_NONE;
+        }
     }
 
     /* Go over each item of the list and reduce it */
@@ -194,7 +251,12 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
     }
 
     clusters = malloc(N * sizeof(int));
-    assert(clusters != NULL);
+    if(clusters == NULL){
+        printf("Error allocating centroid base array. Stacktrace:\n");
+        PyErr_Print();
+        PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
+        Py_RETURN_NONE;
+    }
 
     kmeans(MAX_ITER,obs,centroids, &clusters);
 
