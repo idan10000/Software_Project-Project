@@ -11,8 +11,9 @@ import kmeans_pp
 
 # constants
 eps = 0.0001
-nCap = 200  # TODO: calculate
+nCap = 400  # TODO: calculate
 KCap = 20  # TODO: calculate
+
 
 # def MGS(A):
 #     U = A.astype('float64').copy()
@@ -59,6 +60,28 @@ KCap = 20  # TODO: calculate
 #         U -= (R[i, :, np.newaxis] * col).T
 #     return Q, R
 
+def MGSTest(A):
+    U = A.astype('float32').copy()
+    n = A.shape[0]  # size of matrix A
+
+    R = np.zeros([n, n])
+    Q = np.zeros([n, n])
+
+    for i in range(n):
+        R[i, i] = (np.linalg.norm(U[:, i]))
+        if abs(R[i, i]-eps) == 0:
+            print(f"Division by zero at MGS, setting Q[: , {i:}] = 0")
+            Q[:, i] = 0
+        else:
+            Q[:, i] = U[:, i] / R[i, i]
+        R[i, i + 1:] = Q[:, i].T @ U[:, i + 1:]
+
+        if i < n - 1:
+            U[:, i + 1:] -= np.outer(Q[:, i],R[i, i + 1:])
+            #U[:, i + 1:] -= Q[:, i, np.newaxis] @ R[np.newaxis, i, i + 1:]
+
+    return Q, R
+
 
 def MGS(A):
     U = A.astype('float32').copy()
@@ -69,15 +92,15 @@ def MGS(A):
 
     for i in range(n):
         R[i, i] = (np.linalg.norm(U[:, i]))
-        if R[i, i] == 0:
-            print("Division by zero at MGS, setting Q[: , {i:}] = 0")
+        if abs(R[i, i]-eps) == 0:
+            print(f"Division by zero at MGS, setting Q[: , {i:}] = 0")
             Q[:, i] = 0
         else:
             Q[:, i] = U[:, i] / R[i, i]
         R[i, i + 1:] = Q[:, i].T @ U[:, i + 1:]
 
         if i < n - 1:
-            U[:, i + 1:] = U[:, i + 1:] - Q[:, i, np.newaxis] @ R[np.newaxis, i, i + 1:]
+            U[:, i + 1:] -= Q[:, i, np.newaxis] @ R[np.newaxis, i, i + 1:]
 
     return Q, R
 
@@ -135,7 +158,7 @@ def getWAMatrix(X, n):
 def getDDMatrix(W, n):
     D = np.zeros([n, n])
     for i in range(n):
-        sum = W[i, :].sum(dtype=np.float64)
+        sum = W[i, :].sum(dtype=np.float32)
         if sum == 0:
             print("Division by zero at Diagonal Degree Matrix generation")
             exit()
@@ -145,10 +168,13 @@ def getDDMatrix(W, n):
 
 
 def norm_U(U):
-    # todo: fix if it's just one vector
     T = U.copy()
     norms = np.linalg.norm(T, axis=1)
-    T = T / norms[:, np.newaxis]
+    for i in range(len(norms)):
+        if norms[i] == 0:
+            T[i] = 0
+        else:
+            T[i] /= norms[i, np.newaxis]
     return T
 
 
@@ -185,7 +211,7 @@ def writeClustersToFile(clusters, file):
         file.write("%d\n" % clusters[i][len(clusters[i]) - 1])
 
 
-def createOutputFiles(K, X, Y, NSCClusters, KMPPClusters):
+def createOutputFiles(calc_K, X, Y, NSCClusters, KMPPClusters):
     dataFile = open("data.txt", "w")
     clustersFile = open("clusters.txt", "w")
 
@@ -198,7 +224,7 @@ def createOutputFiles(K, X, Y, NSCClusters, KMPPClusters):
     dataFile.close()
 
     # Write cluster assignments from each algorithm to clusters file
-    clustersFile.write("%d\n" % K)
+    clustersFile.write("%d\n" % calc_K)
     writeClustersToFile(NSCClusters, clustersFile)
     writeClustersToFile(KMPPClusters, clustersFile)
 
@@ -265,7 +291,7 @@ def QRITest(A, eps):
     n = A.shape[0]
     Q1 = np.eye(n)
     for i in range(n):
-        Q, R = MGS(A1)
+        Q, R = MGSTest(A1)
         A1 = R @ Q
 
         if is_dif(Q, Q1, eps):
@@ -310,8 +336,8 @@ def main():
         n = args.N
         K = args.K
 
-    # d = random.choice([2, 3])
-    d = 2
+    d = random.choice([2, 3])
+    # d = 2
     print(rnd)
     print(K)
     print(n)
@@ -330,19 +356,20 @@ def main():
     # calc_K : calculated K using the algorithm
     NSCClusters, NSCVisual, calc_K = NSC(X, K, rnd)  # The clusters from the Normalized Spectral Clustering algorithm
     # temp1, temp2, temp3 = NSCTest(X,K,rnd)
+    # # print(temp2 == NSCVisual)
     if calc_K != 1:
         start = time.time()
-        KMPPClusters, KMPPVisual = kmeans_pp.kmpp(calc_K, n, d, 300, X)  # The clusters from the normal K-Means++ algorithm
+        KMPPClusters, KMPPVisual = kmeans_pp.kmpp(calc_K, n, d, 300,
+                                                  X)  # The clusters from the normal K-Means++ algorithm
         print(time.time() - start)
 
     else:
         KMPPClusters, KMPPVisual = [[i for i in range(n)]], [0 for i in range(n)]
 
-    createOutputFiles(K, X, Y, NSCClusters, KMPPClusters)
+    createOutputFiles(calc_K, X, Y, NSCClusters, KMPPClusters)
     createScatterPlots(n, calc_K, X, d, K, np.array(NSCVisual), np.array(KMPPVisual),
                        round(new_Jaccard(Y, NSCVisual, n), 2),
                        round(new_Jaccard(Y, KMPPVisual, n), 2))
-
 
 
 def testTimeMain(K, n, d=2):
@@ -362,19 +389,20 @@ def testTimeMain(K, n, d=2):
     # clusters : list such that each cell 'i' contains a list of every point that is in cluster 'i', len = K
     # calc_K : calculated K using the algorithm
     NSCClusters, NSCVisual, calc_K = NSC(X, K, False)  # The clusters from the Normalized Spectral Clustering algorithm
-    # temp1, temp2, temp3 = NSCTest(X,K,rnd)
     if calc_K != 1:
         start = time.time()
-        KMPPClusters, KMPPVisual = kmeans_pp.kmpp(calc_K, n, d, 300, X)  # The clusters from the normal K-Means++ algorithm
+        KMPPClusters, KMPPVisual = kmeans_pp.kmpp(calc_K, n, d, 300,
+                                                  X)  # The clusters from the normal K-Means++ algorithm
         print(time.time() - start)
 
     else:
         KMPPClusters, KMPPVisual = [[i for i in range(n)]], [0 for i in range(n)]
 
-    createOutputFiles(K, X, Y, NSCClusters, KMPPClusters)
+    createOutputFiles(calc_K, X, Y, NSCClusters, KMPPClusters)
     createScatterPlots(n, calc_K, X, d, K, np.array(NSCVisual), np.array(KMPPVisual),
                        round(new_Jaccard(Y, NSCVisual, n), 2),
                        round(new_Jaccard(Y, KMPPVisual, n), 2))
+
 
 if __name__ == '__main__':
     main()

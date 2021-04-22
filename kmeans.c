@@ -4,14 +4,15 @@
 #include <Python.h>
 
 
+
 static char algorithm(int MAX_ITER, double **obs, double **centroids, int *clusters, double **sums);
 
 
 long K, N, d;
-int eps;
+double eps;
 
 static char kmeans(int MAX_ITER, double **obs, double **centroids, int** clusters) {
-    int i;
+    int i, j;
     char errorFlag;
     double **sums;
 
@@ -31,6 +32,10 @@ static char kmeans(int MAX_ITER, double **obs, double **centroids, int** cluster
             printf("Error allocating sums inner array at index %d. Stacktrace:\n", i);
             PyErr_Print();
             PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
+
+            for(j = 0; j < i; j++)
+                free(sums[j]);
+            free(sums);
             return 1;
         }
     }
@@ -123,6 +128,7 @@ static char updateCentroids(double **obs, double **centroids, int *clusters, dou
         printf("Error allocating tempCentroid array. Stacktrace:\n");
         PyErr_Print();
         PyErr_SetString(PyExc_MemoryError, "error allocating memory (calloc)");
+        free(clusterSizes);
         return 2;
 
     }
@@ -172,7 +178,7 @@ static char algorithm(int MAX_ITER, double **obs, double **centroids, int *clust
 
 static PyObject* kmeans_capi(PyObject *self, PyObject *args)
 {
-    int MAX_ITER, *clusters;
+    int MAX_ITER, *clusters, errorFlag;
     double **obs, **centroids;
     PyObject *obsRow, *centRow, *item, *_lstObs, *_lstCent; // INPUT variables
 
@@ -201,7 +207,7 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
         printf("Error allocating obs base array. Stacktrace:\n");
         PyErr_Print();
         PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
-        Py_RETURN_NONE;
+        return NULL;
     }
     for (i = 0; i < N; ++i) {
         obs[i] = malloc(sizeof(double) * d);
@@ -209,7 +215,10 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
             printf("Error allocating obs inner array. Stacktrace:\n");
             PyErr_Print();
             PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
-            Py_RETURN_NONE;
+            for(j = 0; j < i; j++)
+                free(obs[j]);
+            free(obs);
+            return NULL;
         }
     }
     centroids = malloc(sizeof(double *) * K);
@@ -217,7 +226,10 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
         printf("Error allocating centroid base array. Stacktrace:\n");
         PyErr_Print();
         PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
-        Py_RETURN_NONE;
+        for(j = 0; j < N; j++)
+            free(obs[j]);
+        free(obs);
+        return NULL;
     }
 
     for (i = 0; i < K; ++i) {
@@ -226,7 +238,13 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
             printf("Error allocating centroids inner array. Stacktrace:\n");
             PyErr_Print();
             PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
-            Py_RETURN_NONE;
+        for(j = 0; j < N; j++)
+            free(obs[j]);
+        free(obs);
+        for(j = 0; j < i; j++)
+            free(centroids[j]);
+        free(centroids);
+            return NULL;
         }
     }
 
@@ -255,10 +273,18 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
         printf("Error allocating centroid base array. Stacktrace:\n");
         PyErr_Print();
         PyErr_SetString(PyExc_MemoryError, "error allocating memory (malloc)");
-        Py_RETURN_NONE;
+        for(j = 0; j < N; j++)
+            free(obs[j]);
+        free(obs);
+        for(j = 0; j < N; j++)
+            free(centroids[j]);
+        free(centroids);
+        return NULL;
     }
 
-    kmeans(MAX_ITER,obs,centroids, &clusters);
+    errorFlag = kmeans(MAX_ITER,obs,centroids, &clusters);
+
+
 
     python_cluster_list = PyList_New(N);
     for (i = 0; i < N; ++i){
@@ -276,6 +302,11 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
         free(centroids[i]);
     }
     free(centroids);
+
+    if(errorFlag == 1){
+        free(clusters);
+        return NULL;
+    }
 
     return python_cluster_list;
 }

@@ -7,16 +7,13 @@ def kmpp(K, N, d, MAX_ITER, obs):
 
     initial, _ = k_means_pp(obs, N, K, d)
     X = mykmeanssp.kmeans(MAX_ITER, obs.tolist(), initial.tolist())
-    return testtttt(X,K)
-
-def testtttt(X,K):
     _, clusterSizes = np.unique(np.array(X), return_counts=True)
     Y = [[0] * clusterSizes[i] for i in range(K)]
     for i in range(len(X)):
         Y[X[i]][clusterSizes[X[i]] - 1] = i
         clusterSizes[X[i]] -= 1
-
     return Y, X
+
 
 
 def print_ind(vec):
