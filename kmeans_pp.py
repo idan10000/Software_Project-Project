@@ -1,10 +1,11 @@
 import numpy as np
 import mykmeanssp
 
+"""
+The K-means++ algorithm as done in HW2. Uses the capi module "mykmeanssp"
+"""
 
 def kmpp(K, N, d, MAX_ITER, obs):
-    # obs = pd.read_csv(f'{args.filename}', header=None)
-
     initial, _ = k_means_pp(obs, N, K, d)
     X = mykmeanssp.kmeans(MAX_ITER, obs.tolist(), initial.tolist())
     _, clusterSizes = np.unique(np.array(X), return_counts=True)

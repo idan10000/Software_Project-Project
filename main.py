@@ -5,108 +5,54 @@ from sklearn.datasets import make_blobs
 import matplotlib.pyplot as plt
 import numpy as np
 
-import time
-
 import kmeans_pp
 
 # constants
 eps = 0.0001
-nCap = 400  # TODO: calculate
-KCap = 20  # TODO: calculate
+nCap3d = 390
+nCap2d = 400
 
-
-# def MGS(A):
-#     U = A.astype('float64').copy()
-#     n = A.shape[0]  # size of matrix A
-#
-#     R = np.zeros([n, n])
-#     Q = np.zeros([n, n])
-#
-#     for i in range(n):
-#         R[i, i] = (np.linalg.norm(U[:, i]))
-#         if R[i, i] == 0:
-#             print("zero division")  # todo: exit with error message
-#         Q[:, i] = U[:, i] / R[i, i]
-#         for j in range(i + 1, n):
-#             R[i, j] = Q[:, i].T @ U[:, j]
-#             U[:, j] = (U[:, j] - (Q[:, i] * R[i, j]))
-#     return Q, R
-#
-# def MGS(A):
-#     """
-#     Modified Gram-Shmidt algorithm
-#
-#     arguments:
-#     A - a matrix of size n*n
-#
-#     returns a tuple containing a decomposition of A into two matrices, Q and R, where A = QR and:
-#         [0] Q is orthogonal
-#         [1] R is upper triangular
-#     """
-#     n = A.shape[0]
-#     U = A.copy()
-#     R = np.zeros((n, n), dtype=np.float32)
-#     Q = np.zeros((n, n), dtype=np.float32)
-#     for i in range(n):
-#         temp = np.linalg.norm(U[:, i])
-#         R[i, i] += temp
-#         col = U[:, i] / temp
-#         Q[:, i] = col
-#         # col is broadcasted to support matrix multiplication
-#         # equivalent to computing R[i, j] += col @ U[:, j] for i+1 <= j <= n
-#         R[i, i + 1:] = col @ U[:, i + 1:]
-#         # equivalent to computing U[:, j] = U[:, j] - R[i, j] * col for i+1 <= j <= n
-#         # this is thanks to R being upper triangular
-#         U -= (R[i, :, np.newaxis] * col).T
-#     return Q, R
-
-def MGSTest(A):
-    U = A.astype('float32').copy()
-    n = A.shape[0]  # size of matrix A
-
-    R = np.zeros([n, n])
-    Q = np.zeros([n, n])
-
-    for i in range(n):
-        R[i, i] = (np.linalg.norm(U[:, i]))
-        if abs(R[i, i]-eps) == 0:
-            print(f"Division by zero at MGS, setting Q[: , {i:}] = 0")
-            Q[:, i] = 0
-        else:
-            Q[:, i] = U[:, i] / R[i, i]
-        R[i, i + 1:] = Q[:, i].T @ U[:, i + 1:]
-
-        if i < n - 1:
-            U[:, i + 1:] -= np.outer(Q[:, i],R[i, i + 1:])
-            #U[:, i + 1:] -= Q[:, i, np.newaxis] @ R[np.newaxis, i, i + 1:]
-
-    return Q, R
+KCap = 20
 
 
 def MGS(A):
+    """
+    The modified Gram-Schmidt algorithm as seen in the assignment.
+    This method was found to be the bottle neck of the algorithm, hence we have tried to optimise it as much as possible.
+    By switching lines 5-7 (the inner loop) of the MGS algorithm with a matrix multiplication to use numpy's optimization.
+    :param A: the matrix that is to be decomposed. Usually R @ Q from a previous MGS
+    :return: The algorithm returns Q, R such that Q is orthogonal and R is upper triangular.
+    """
     U = A.astype('float32').copy()
-    n = A.shape[0]  # size of matrix A
+    n = A.shape[0]  # dim of square matrix A
 
     R = np.zeros([n, n])
     Q = np.zeros([n, n])
 
     for i in range(n):
         R[i, i] = (np.linalg.norm(U[:, i]))
-        if abs(R[i, i]-eps) == 0:
-            print(f"Division by zero at MGS, setting Q[: , {i:}] = 0")
+        if R[i, i] <= eps:  # handle division by 0 error (never occurred during testing)
             Q[:, i] = 0
         else:
             Q[:, i] = U[:, i] / R[i, i]
+
+        #  matrix multiplications instead of inner for loop in lines 5-7 of the algorithm in the assignment
         R[i, i + 1:] = Q[:, i].T @ U[:, i + 1:]
 
-        if i < n - 1:
-            U[:, i + 1:] -= Q[:, i, np.newaxis] @ R[np.newaxis, i, i + 1:]
+        U[:, i + 1:] -= Q[:, i, np.newaxis] @ R[np.newaxis, i, i + 1:]
 
     return Q, R
 
 
 def QRI(A, eps):
-    start = time.time()
+    """
+    An approximation algorithm to calculating A1 and Q1 such that Q1 is orthogonal whose columns approach the
+eigenvectors of A and A1 is diagonal whose diagonal elements approach the eigenvalues
+    :param A: The normalized graph Laplacian matrix
+    :param eps: the constant used in comparing 2 matrices
+    :return: np.array Q1 whose columns approach the eigenvectors of A, and np.array A1 whose
+    diagonal elements approach the eigenvalues of A.
+    """
     A1 = A.copy()
     n = A.shape[0]
     Q1 = np.eye(n)
@@ -114,31 +60,39 @@ def QRI(A, eps):
         Q, R = MGS(A1)
         A1 = R @ Q
 
-        if is_dif(Q, Q1, eps):
-            print(f"n = {n:}")
-            print(time.time() - start)
+        if is_dif(Q, Q1, eps):  # compare if the to matrices are the same with eps accuracy, if so end the algorithm
             return A1, Q1
         Q1 = Q1 @ Q
-    print(f"n = {n:}")
-    print(time.time() - start)
     return A1, Q1
 
 
-# TODO: possible CAPI method for higher efficiency
 def is_dif(Q, Q1, eps):
+    """
+    Compare Q and Q1 if all values are the same with eps accuracy. It is done by checking if the maximum and minimum of
+    the difference between the matrices are smaller than eps or larger than -eps respectively
+    :param Q: the first compared matrix
+    :param Q1: the second compared matrix
+    :param eps: the accuracy of the comparison
+    :return: if the matrices are equal with eps accuracy
+    """
     Q2 = np.absolute(Q1) - np.absolute(Q1 @ Q)
     return Q2.max() < eps and Q2.min() > -eps
 
 
 def find_k(A1, orig_K, randomFlag):
+    """
+    If randomFlag is true, the algorithm will use the Eigengap Heuristic algorithm to find the best k.
+    If randomFlag is false, the algorithm will set k = orig_K
+    :param A1: a diagonal matrix whose diagonal elements approach the eigenvalues
+    :param orig_K: the k inputted by the user calling the program
+    :param randomFlag: the flag inserted by the user to define the randomness of the algorithm
+    :return: the appropriate k according to randomFlag and the corresponding k eigenvectors.
+    """
     n = A1.shape[0]
     v = np.array([A1[i, i] for i in range(n)])
     vArgs = v.argsort()
     if randomFlag:
-        v.sort()  # TODO: check if sort is not needed
-        # can do boolean indexing to get V
-
-        # TODO: need to check that it is less than n/2
+        v.sort()
         k = 1 + np.argmax(np.diff(v[:int(np.ceil(n / 2) + 1)]))
         return k, vArgs[:k]
     else:
@@ -146,6 +100,12 @@ def find_k(A1, orig_K, randomFlag):
 
 
 def getWAMatrix(X, n):
+    """
+    Calculates the Weighted Adjacency matrix according to the definition given in the assignment.
+    :param X: the blobs generated by the sklearn make_blobs function
+    :param n: the amount of blobs generated
+    :return: W, the Weighted Adjacency matrix, which is symmetric and non-negative.
+    """
     W = np.zeros([n, n])
     for i in range(n):
         for j in range(i + 1, n):
@@ -156,6 +116,12 @@ def getWAMatrix(X, n):
 
 
 def getDDMatrix(W, n):
+    """
+    Calculates the Diagonal Degree matrix according to the definition given in the assignment.
+    :param W: the Weighted Adjacency matrix
+    :param n: the amount of blobs generated
+    :return: D^-1/2 as described in the algorithm
+    """
     D = np.zeros([n, n])
     for i in range(n):
         sum = W[i, :].sum(dtype=np.float32)
@@ -168,10 +134,15 @@ def getDDMatrix(W, n):
 
 
 def norm_U(U):
+    """
+    Renormalizing each of U's ros to have unit length
+    :param U: The eigenvector matrix at the size n x k
+    :return: matrix T after renormilizing
+    """
     T = U.copy()
     norms = np.linalg.norm(T, axis=1)
     for i in range(len(norms)):
-        if norms[i] == 0:
+        if norms[i] <= eps:
             T[i] = 0
         else:
             T[i] /= norms[i, np.newaxis]
@@ -179,6 +150,20 @@ def norm_U(U):
 
 
 def NSC(X, orig_K, randomFlag):
+    """
+    The Normalized Spectral Clustering algorithm. the main algorithm of the assignment.
+    First the algorithm calculates the matrices needed for the Laplacian matrix.
+    Then it calculates the k for the algorithm and the according eigenvectors using the QRI algorithm and the
+    find_k algorithm.
+    Lastly the algorithm calls the KMPP algorithm and returns the results and the according k.
+    :param X: the blobs generated by the sklearn make_blobs function
+    :param orig_K: the k inputted by the user calling the program
+    :param randomFlag: the flag inserted by the user to define the randomness of the algorithm
+    :return:
+            clusters : list such that each cell 'i' contains a list of every point that is in cluster 'i', len = K
+            visual : list cluster assignment for every point, len = N
+            k : calculated K using the find_k method
+    """
     n = X.shape[0]
     W = getWAMatrix(X, n)  # step 1
     D = getDDMatrix(W, n)
@@ -188,20 +173,18 @@ def NSC(X, orig_K, randomFlag):
     k, eigVectorsIndexes = find_k(A, orig_K, randomFlag)  # step 3
 
     if k == 1:
-        temp1, temp2 = [[i for i in range(n)]], [0 for i in range(n)]
-        return temp1, temp2, k
+        clusters, visual = [[i for i in range(n)]], [0 for i in range(n)]
+        return clusters, visual, k
 
     U = Q[:, eigVectorsIndexes]  # step 4 - really not sure if this one will work
     T = norm_U(U)  # step 5
-    start = time.time()
-    temp1, temp2 = kmeans_pp.kmpp(k, n, T.shape[1], 300, T)  # step 6 + 7 (7 in C)
-    print(time.time() - start)
-    return temp1, temp2, k
+    clusters, visual = kmeans_pp.kmpp(k, n, T.shape[1], 300, T)  # step 6 + 7 (7 in C)
+    return clusters, visual, k
 
 
 def writeClustersToFile(clusters, file):
     """
-    Writes the clusters to the file in the format defined by the assignment (ex. 1,9,2)
+    Writes the clusters to the file in the format defined by the assignment (ex. 1,2,5,9,4)
     :param clusters: the cluster assignment created by the respective algorithm
     :param file: the file the clusters are to be written in
     """
@@ -212,6 +195,19 @@ def writeClustersToFile(clusters, file):
 
 
 def createOutputFiles(calc_K, X, Y, NSCClusters, KMPPClusters):
+    """
+    Main method to make both data.txt and cluster.txt output files needed for the assignment.
+    The clusters.txt file contains the assignment for each cluster as calculated by the NSC and KMPP algorithms.
+    The data.txt file contains the blobs
+    :param calc_K: the k used in the KMPP algorithms (the stand alone one and the one through the NSC algorithm).
+            calculated through the find_k algorithm.
+    :param X: the blobs generated by the sklearn make_blobs function
+    :param Y: the assignment for the blobs generated by the sklearn make_blobs function
+    :param NSCClusters: a list calculated from the NSC algorithm
+            such that each cell 'i' contains a list of every point that is in cluster 'i', len = K
+    :param KMPPClusters: a list calculated from the KMPP algorithm
+            such that each cell 'i' contains a list of every point that is in cluster 'i', len = K
+    """
     dataFile = open("data.txt", "w")
     clustersFile = open("clusters.txt", "w")
 
@@ -231,9 +227,45 @@ def createOutputFiles(calc_K, X, Y, NSCClusters, KMPPClusters):
     clustersFile.close()
 
 
+def Jaccard(Y, npVisual, n):
+    """
+    The method calculates the Jaccard measure for the input cluster list.
+    :param Y: the cluster assignment for each blob as generated from the sklearn make_blobs method
+    :param npVisual: a list of cluster assignments calculated from either the NSC or the KMPP algorithm
+            for every point, len = N
+    :param n: the amount of blobs generated
+    :return: the Jaccard measure
+    """
+    both = 0
+    either = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            real = Y[i] == Y[j]
+            calc = npVisual[i] == npVisual[j]
+            if real and calc:
+                both += 1
+            if real or calc:
+                either += 1
+    return both / either
+
+
 def createScatterPlots(n, K, X, d, orig_K, NSCVisual, KMPPVisual, NSCJM, KMPPJM):
+    """
+    Creates a graph of the clusters returned by the NSC and the KMPP algorithms. colors each cluster with its own color.
+    :param n: the amount of blobs generated
+    :param K: the k used in the KMPP algorithms (the stand alone one and the one through the NSC algorithm).
+            calculated through the find_k algorithm.
+    :param X: the blobs generated by the sklearn make_blobs function
+    :param d: the dimension of the blobs (2 or 3)
+    :param orig_K: The K inputted by the user
+    :param NSCVisual: a list of cluster assignments calculated from the NSC algorithm for every point, len = N
+    :param KMPPVisual: a list of cluster assignments calculated from the KMPP algorithm for every point, len = N
+    :param NSCJM: the Jaccard measure of the NSC algorithm
+    :param KMPPJM: the Jaccard measure of the KMPP algorithm
+    """
     fig = plt.figure()
 
+    # create a graph according to the dimension of the blobs (2d vs 3d)
     if d == 2:
         spectralPlot = fig.add_subplot(221)
         spectralPlot.scatter(X[:, 0], X[:, 1], c=NSCVisual)
@@ -245,8 +277,10 @@ def createScatterPlots(n, K, X, d, orig_K, NSCVisual, KMPPVisual, NSCJM, KMPPJM)
         KMPlot = fig.add_subplot(222, projection='3d')
         KMPlot.scatter(X[:, 0], X[:, 1], X[:, 2], c=KMPPVisual)
 
+    # add title and description text to the graph
     spectralPlot.title.set_text('Normalized Spectral Clustering')
     KMPlot.title.set_text('K-Means++')
+
     textPlot = fig.add_subplot(223)
     textPlot.set_axis_off()
     text = f"""Data was generated from the values:
@@ -261,6 +295,11 @@ def createScatterPlots(n, K, X, d, orig_K, NSCVisual, KMPPVisual, NSCJM, KMPPJM)
 
 
 def str2bool(v):
+    """
+    Used to parse boolean input from user.
+    :param v: the boolean expression as string
+    :return: the boolean value
+    """
     if isinstance(v, bool):
         return v
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -271,64 +310,17 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
-def countY(Y):
-    _, counts = np.unique(Y, return_counts=True)
-    pairs = counts * (counts - 1) / 2
-    return sum(pairs)
-
-
-def Jaccard(clusters, Y, npVisual):
-    count = 0
-    for lst in clusters:
-        vec = Y[lst]
-        count += countY(vec)
-
-    return count / countY(npVisual)
-
-
-def QRITest(A, eps):
-    A1 = A.copy()
-    n = A.shape[0]
-    Q1 = np.eye(n)
-    for i in range(n):
-        Q, R = MGSTest(A1)
-        A1 = R @ Q
-
-        if is_dif(Q, Q1, eps):
-            return A1, Q1
-        Q1 = Q1 @ Q
-    return A1, Q1
-
-
-def NSCTest(X, orig_K, randomFlag):
-    n = X.shape[0]
-    W = getWAMatrix(X, n)  # step 1
-    D = getDDMatrix(W, n)
-    L = np.eye(n) - D @ W @ D  # step 2
-
-    A, Q = QRITest(L, eps)
-    k, eigVectorsIndexes = find_k(A, orig_K, randomFlag)  # step 3
-
-    if k == 1:
-        temp1, temp2 = [[i for i in range(n)]], [0 for i in range(n)]
-        return temp1, temp2, k
-
-    U = Q[:, eigVectorsIndexes]  # step 4 - really not sure if this one will work
-    T = norm_U(U)  # step 5
-    temp1, temp2 = kmeans_pp.kmpp(k, n, T.shape[1], 300, T)  # step 6 + 7 (7 in C)
-    return temp1, temp2, k
-
-
 def main():
-    print("starting")
     parser = argparse.ArgumentParser()
     parser.add_argument("K", type=int)
     parser.add_argument("N", type=int)
     parser.add_argument("Random", type=str2bool)
     args = parser.parse_args()
 
-    # TODO: check if needed different max values for 2 and 3 dimensions
     rnd = args.Random
+    d = random.choice([2, 3])
+    nCap = nCap2d if d == 2 else nCap3d
+
     if rnd:
         n = random.choice(range(nCap // 2, nCap + 1))
         K = random.choice(range(KCap // 2, KCap + 1))
@@ -336,72 +328,37 @@ def main():
         n = args.N
         K = args.K
 
-    d = random.choice([2, 3])
-    # d = 2
-    print(rnd)
-    print(K)
-    print(n)
-    print(d)
     if K >= n or K <= 0 or n <= 0 or type(rnd) is not bool:  # handle illegal args
         print("illegal arguments")
         exit()
 
-    if K > KCap or n > nCap:
-        print("BEWARE inputted n or K values exceed maximum capacity - the program will run for over 5 minutes")
+    print(f"The maximum n capacity of the project for d = {d:} is {nCap:}")
+    print(f"The maximum k capacity of the project for d = {d:} is {KCap:}")
 
+    if K > KCap or n > nCap:
+        print("BEWARE inputted n or K values exceed maximum capacity - the program will likely run for over 5 minutes")
+
+    # generate the blobs
     X, Y = make_blobs(n, d, centers=K)
 
     # visual : list cluster assignment for every point, len = N
     # clusters : list such that each cell 'i' contains a list of every point that is in cluster 'i', len = K
     # calc_K : calculated K using the algorithm
     NSCClusters, NSCVisual, calc_K = NSC(X, K, rnd)  # The clusters from the Normalized Spectral Clustering algorithm
-    # temp1, temp2, temp3 = NSCTest(X,K,rnd)
-    # # print(temp2 == NSCVisual)
+
     if calc_K != 1:
-        start = time.time()
         KMPPClusters, KMPPVisual = kmeans_pp.kmpp(calc_K, n, d, 300,
                                                   X)  # The clusters from the normal K-Means++ algorithm
-        print(time.time() - start)
 
-    else:
+    else:  # handle end case of k = 1, as in this instance all blobs are in the same cluster already and there is no
+        # need to run any algorithm
         KMPPClusters, KMPPVisual = [[i for i in range(n)]], [0 for i in range(n)]
 
-    createOutputFiles(calc_K, X, Y, NSCClusters, KMPPClusters)
-    createScatterPlots(n, calc_K, X, d, K, np.array(NSCVisual), np.array(KMPPVisual),
-                       round(new_Jaccard(Y, NSCVisual, n), 2),
-                       round(new_Jaccard(Y, KMPPVisual, n), 2))
+    createOutputFiles(calc_K, X, Y, NSCClusters, KMPPClusters)  # Create the output files
+    createScatterPlots(n, calc_K, X, d, K, np.array(NSCVisual), np.array(KMPPVisual),  # Create the graph
+                       round(Jaccard(Y, NSCVisual, n), 2),
+                       round(Jaccard(Y, KMPPVisual, n), 2))
 
-
-def testTimeMain(K, n, d=2):
-    print(K)
-    print(n)
-    print(d)
-    if K >= n or K <= 0 or n <= 0:  # handle illegal args
-        print("illegal arguments")
-        exit()
-
-    if K > KCap or n > nCap:
-        print("BEWARE inputted n or K values exceed maximum capacity - the program will run for over 5 minutes")
-
-    X, Y = make_blobs(n, d, centers=K)
-
-    # visual : list cluster assignment for every point, len = N
-    # clusters : list such that each cell 'i' contains a list of every point that is in cluster 'i', len = K
-    # calc_K : calculated K using the algorithm
-    NSCClusters, NSCVisual, calc_K = NSC(X, K, False)  # The clusters from the Normalized Spectral Clustering algorithm
-    if calc_K != 1:
-        start = time.time()
-        KMPPClusters, KMPPVisual = kmeans_pp.kmpp(calc_K, n, d, 300,
-                                                  X)  # The clusters from the normal K-Means++ algorithm
-        print(time.time() - start)
-
-    else:
-        KMPPClusters, KMPPVisual = [[i for i in range(n)]], [0 for i in range(n)]
-
-    createOutputFiles(calc_K, X, Y, NSCClusters, KMPPClusters)
-    createScatterPlots(n, calc_K, X, d, K, np.array(NSCVisual), np.array(KMPPVisual),
-                       round(new_Jaccard(Y, NSCVisual, n), 2),
-                       round(new_Jaccard(Y, KMPPVisual, n), 2))
 
 
 if __name__ == '__main__':

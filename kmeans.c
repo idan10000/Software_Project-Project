@@ -202,6 +202,7 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
     ld = PyList_Size(PyList_GetItem(_lstObs,0));
     eps = 0.0001;
 
+    /* obs memory allocation */
     obs = malloc(sizeof(double *) * N);
     if(obs == NULL){
         printf("Error allocating obs base array. Stacktrace:\n");
@@ -221,6 +222,8 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
             return NULL;
         }
     }
+
+    /* centroids memory allocation */
     centroids = malloc(sizeof(double *) * K);
     if(centroids == NULL){
         printf("Error allocating centroid base array. Stacktrace:\n");
@@ -268,6 +271,7 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
         }
     }
 
+    /* clusters memory allocation */
     clusters = malloc(N * sizeof(int));
     if(clusters == NULL){
         printf("Error allocating centroid base array. Stacktrace:\n");
@@ -282,8 +286,9 @@ static PyObject* kmeans_capi(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    errorFlag = kmeans(MAX_ITER,obs,centroids, &clusters);
 
+
+    errorFlag = kmeans(MAX_ITER,obs,centroids, &clusters);
 
 
     python_cluster_list = PyList_New(N);
